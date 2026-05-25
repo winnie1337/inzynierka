@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack Trainer - Logowanie</title>
+    <style>
+        /* Kasynowy styl z czarnym tłem, efektami świetlnymi i uśmiechającymi akcentami */
+        body {
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+            background-image:
+                radial-gradient(circle at 20% 80%, rgba(255, 215, 0, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 215, 0, 0.05) 0%, transparent 50%);
+            background-attachment: fixed;
+            font-family: 'Trebuchet MS', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Efekty świetlne */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.03) 0%, transparent 70%);
+            animation: glow 8s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            0% { transform: scale(1); opacity: 0.3; }
+            100% { transform: scale(1.05); opacity: 0.5; }
+        }
+
+        .main-container {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border: 2px solid #daa520;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow:
+                0 0 30px rgba(255, 215, 0, 0.3),
+                inset 0 0 30px rgba(218, 165, 32, 0.1);
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 400px;
+            animation: slideIn 0.8s ease-out;
+        }
+
+        @keyframes slideIn {
+            0% {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            font-size: 2.5em;
+            color: #daa520;
+            text-shadow:
+                0 0 10px rgba(218, 165, 32, 0.5),
+                0 0 20px rgba(218, 165, 32, 0.3);
+            margin: 0;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .logo p {
+            color: #ccc;
+            margin: 0;
+            font-style: italic;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #daa520;
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+        }
+
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #daa520;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #fff;
+            box-shadow:
+                0 0 10px rgba(255, 215, 0, 0.3),
+                inset 0 0 10px rgba(255, 215, 0, 0.1);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(45deg, #daa520, #ffd700);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(45deg, #ffd700, #daa520);
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .switch-mode {
+            text-align: center;
+            margin-top: 20px;
+            color: #aaa;
+        }
+
+        .switch-mode button {
+            background: none;
+            border: none;
+            color: #daa520;
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 16px;
+            transition: color 0.3s ease;
+        }
+
+        .switch-mode button:hover {
+            color: #ffd700;
+        }
+
+        .error-message {
+            background: rgba(220, 53, 69, 0.8);
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #dc3545;
+            display: none;
+            text-align: center;
+        }
+
+        .success-message {
+            background: rgba(40, 167, 69, 0.8);
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #28a745;
+            display: none;
+            text-align: center;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #daa520;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsywność */
+        @media (max-width: 480px) {
+            .main-container {
+                margin: 20px;
+                padding: 30px 20px;
+            }
+
+            .logo h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="logo">
+            <h1>🃏 BlackJack Trainer</h1>
+            <p>Nauka gry w blackjacka z AI</p>
+        </div>
+
+        <div id="error-message" class="error-message"></div>
+        <div id="success-message" class="success-message"></div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Hasło:</label>
+                <input type="password" id="password" required>
+            </div>
+
+            <button type="submit" class="btn" id="login-btn">
+                <span id="login-text">Zaloguj się</span>
+            </button>
+        </form>
+
+        <form id="register-form" style="display: none;">
+            <div class="form-group">
+                <label for="register-email">Email:</label>
+                <input type="email" id="register-email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="register-password">Hasło (min 6 znaków):</label>
+                <input type="password" id="register-password" required minlength="6">
+            </div>
+
+            <button type="submit" class="btn" id="register-btn">
+                <span id="register-text">Zarejestruj się</span>
+            </button>
+        </form>
+
+        <div class="switch-mode">
+            <span id="login-mode">Nie masz konta? <button id="switch-to-register">Zarejestruj się</button></span>
+            <span id="register-mode" style="display: none;">Masz już konto? <button id="switch-to-login">Zaloguj się</button></span>
+        </div>
+    </div>
+
+    <script>
+        // Obsługa formularzy
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const switchToRegister = document.getElementById('switch-to-register');
+        const switchToLogin = document.getElementById('switch-to-login');
+        const loginMode = document.getElementById('login-mode');
+        const registerMode = document.getElementById('register-mode');
+        const errorMessage = document.getElementById('error-message');
+        const successMessage = document.getElementById('success-message');
+
+        // Przełączanie między logowaniem a rejestracją
+        switchToRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'block';
+            loginMode.style.display = 'none';
+            registerMode.style.display = 'inline';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        });
+
+        switchToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerForm.style.display = 'none';
+            loginForm.style.display = 'block';
+            registerMode.style.display = 'none';
+            loginMode.style.display = 'inline';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        });
+
+        // Wysyłanie formularza logowania
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            showLoading(true, 'login');
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess('Logowanie zakończone sukcesem!');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1500);
+                } else {
+                    showError(data.error || 'Błąd logowania');
+                }
+            } catch (error) {
+                showError('Błąd połączenia z serwerem');
+            } finally {
+                showLoading(false, 'login');
+            }
+        });
+
+        // Wysyłanie formularza rejestracji
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+
+            showLoading(true, 'register');
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess('Rejestracja zakończona sukcesem! Możesz się teraz zalogować.');
+                    setTimeout(() => {
+                        switchToLogin.click();
+                    }, 2000);
+                } else {
+                    showError(data.error || 'Błąd rejestracji');
+                }
+            } catch (error) {
+                showError('Błąd połączenia z serwerem');
+            } finally {
+                showLoading(false, 'register');
+            }
+        });
+
+        // Funkcje pomocnicze
+        function showLoading(isLoading, formType) {
+            const button = formType === 'login' ? document.getElementById('login-btn') : document.getElementById('register-btn');
+            const text = formType === 'login' ? document.getElementById('login-text') : document.getElementById('register-text');
+
+            if (isLoading) {
+                text.innerHTML = '<div class="loading"></div>';
+                button.disabled = true;
+            } else {
+                text.innerHTML = formType === 'login' ? 'Zaloguj się' : 'Zarejestruj się';
+                button.disabled = false;
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

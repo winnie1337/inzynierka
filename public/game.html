@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack Trainer - Nauka Basic Strategy</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Nagłówek -->
+        <div class="header">
+            <h1>♠️ Blackjack Trainer ♥️</h1>
+            <p class="subtitle">Naucz się optymalnej strategii gry</p>
+        </div>
+
+        <!-- Główna gra -->
+        <div class="game-container">
+            <!-- Stół do gry -->
+            <div class="game-main">
+                <!-- Informacje o grze -->
+                <div class="game-info">
+                    <div class="info-item">
+                        <span class="info-label">💰 Balans</span>
+                        <span id="balance-display" class="info-value">$1000</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Twoja ręka</span>
+                        <span id="player-value" class="info-value">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Dealer</span>
+                        <span id="dealer-value" class="info-value">?</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Dokładność</span>
+                        <span id="accuracy-stat" class="info-value">0%</span>
+                    </div>
+                </div>
+
+                <!-- Obszar kart -->
+                <div class="cards-area">
+                    <!-- Talia kart na środku stołu -->
+                    <div class="deck-stack">
+                        <div class="deck-card"></div>
+                        <div class="deck-card"></div>
+                        <div class="deck-card"></div>
+                    </div>
+
+                    <!-- Dealer -->
+                    <div class="dealer-section">
+                        <div class="hand-label">Dealer</div>
+                        <div id="dealer-hand" class="hand"></div>
+                    </div>
+
+                    <!-- Gracz -->
+                    <div class="player-section">
+                        <div class="hand-label">Ty</div>
+                        <div id="player-hands" class="hands-container"></div>
+                    </div>
+                </div>
+
+                <!-- Przyciski akcji -->
+                <div class="actions">
+                    <button id="hit-btn" class="action-btn hit" disabled>
+                        <span class="btn-icon">👆</span>
+                        <span>HIT</span>
+                    </button>
+                    <button id="stand-btn" class="action-btn stand" disabled>
+                        <span class="btn-icon">✋</span>
+                        <span>STAND</span>
+                    </button>
+                    <button id="double-btn" class="action-btn double" disabled>
+                        <span class="btn-icon">⬆️</span>
+                        <span>DOUBLE</span>
+                    </button>
+                    <button id="split-btn" class="action-btn split" disabled>
+                        <span class="btn-icon">↔️</span>
+                        <span>SPLIT</span>
+                    </button>
+                    <button id="surrender-btn" class="action-btn surrender" disabled>
+                        <span class="btn-icon">🏳️</span>
+                        <span>SURRENDER</span>
+                    </button>
+                </div>
+
+                <!-- Uproszczony wybór -->
+                <div id="betting-section" class="betting-section" style="padding: 30px;">
+                    <h3 style="margin-bottom: 25px;">🎲 Rozpocznij nową grę</h3>
+                    
+                    <div style="margin-bottom: 25px;">
+                        <label for="num-decks" style="color: var(--gold); font-weight: 500; display: block; margin-bottom: 10px;">Liczba talii:</label>
+                        <select id="num-decks" style="padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid var(--gold); background: rgba(0,0,0,0.3); color: var(--text-light); width: 200px;">
+                            <option value="1">1 talia</option>
+                            <option value="2">2 talie</option>
+                            <option value="4">4 talie</option>
+                            <option value="6" selected>6 talii</option>
+                            <option value="8">8 talii</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 25px;">
+                        <label for="num-hands" style="color: var(--gold); font-weight: 500; display: block; margin-bottom: 10px;">Liczba rąk (1-4):</label>
+                        <select id="num-hands" style="padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid var(--gold); background: rgba(0,0,0,0.3); color: var(--text-light); width: 200px;">
+                            <option value="1" selected>1 ręka</option>
+                            <option value="2">2 ręce</option>
+                            <option value="3">3 ręce</option>
+                            <option value="4">4 ręce</option>
+                        </select>
+                    </div>
+
+                    <button id="start-game-btn" class="action-btn new-game" style="margin-top: 20px;">
+                        🎰 ROZPOCZNIJ GRĘ
+                    </button>
+                </div>
+
+                <!-- Kontrola gry -->
+                <div class="game-controls" style="display: none;">
+                    <button id="new-game-btn" class="action-btn new-game">
+                        🎲 NOWA GRA
+                    </button>
+                </div>
+            </div>
+
+            <!-- Panel feedbacku AI (prawa strona) -->
+            <div class="ai-chat">
+                <div class="chat-header">
+                    <h3>🤖 Trener AI</h3>
+                    <p>Ocena twoich decyzji</p>
+                </div>
+                <div id="chat-messages" class="chat-messages">
+                    <div class="message info">
+                        <strong>Witaj w Blackjack Trainer!</strong><br><br>
+                        Kliknij "NOWA GRA" aby rozpocząć trenowanie Basic Strategy.<br><br>
+                        Po każdym ruchu otrzymasz natychmiastowy feedback!
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Zadaj pytanie AI..." class="chat-input">
+                    <button id="send-chat-btn" class="ai-btn">Wyślij</button>
+                </div>
+                <div class="ai-buttons">
+                    <button id="get-tip-btn" class="ai-btn">💡 Porada</button>
+                    <button id="counting-mode-btn" class="ai-btn">🔢 Tryb liczenia</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sekcja liczenia kart (ukryta domyślnie) -->
+        <div id="counter-section" class="counter-section" style="display: none;">
+            <h3>📊 Liczenie kart (Hi-Lo)</h3>
+            <div class="counter-display">
+                <div class="counter-item">
+                    <div class="counter-label">Running Count</div>
+                    <div id="running-count" class="counter-value">0</div>
+                </div>
+                <div class="counter-item">
+                    <div class="counter-label">True Count</div>
+                    <div id="true-count" class="counter-value">0</div>
+                </div>
+                <div class="counter-item">
+                    <div class="counter-label">Pozostałe talie</div>
+                    <div id="decks-remaining" class="counter-value">6.0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statystyki -->
+        <div class="stats-section">
+            <h3>📈 Twoje statystyki</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div id="accuracy-stat-big" class="stat-value">0%</div>
+                    <div class="stat-label">% Dokładności</div>
+                </div>
+                <div class="stat-card">
+                    <div id="decisions-stat" class="stat-value">0</div>
+                    <div class="stat-label">Dobre decyzje</div>
+                </div>
+                <div class="stat-card">
+                    <div id="wrong-decisions-stat" class="stat-value">0</div>
+                    <div class="stat-label">Złe decyzje</div>
+                </div>
+                <div class="stat-card">
+                    <div id="total-decisions-stat" class="stat-value">0</div>
+                    <div class="stat-label">Wszystkie decyzje</div>
+                </div>
+                <div class="stat-card">
+                    <div id="hands-stat" class="stat-value">0</div>
+                    <div class="stat-label">Ręce zagrane</div>
+                </div>
+                <div class="stat-card">
+                    <div id="winrate-stat" class="stat-value">0%</div>
+                    <div class="stat-label">Wygrane</div>
+                </div>
+                <div class="stat-card">
+                    <div id="counting-accuracy-stat" class="stat-value">0%</div>
+                    <div class="stat-label">Liczenie kart</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal liczenia kart -->
+    <div id="counting-modal" class="counting-modal">
+        <div class="counting-content">
+            <h2>🎯 Test liczenia kart</h2>
+            <p>Podaj wartości Running Count i True Count:</p>
+            <div class="counting-inputs">
+                <div>
+                    <label>Running Count:</label>
+                    <input type="number" id="rc-input" class="counting-input" value="0">
+                </div>
+                <div>
+                    <label>True Count:</label>
+                    <input type="number" id="tc-input" class="counting-input" value="0">
+                </div>
+            </div>
+            <div style="margin-top: 20px;">
+                <button id="submit-count-btn" class="action-btn">Sprawdź</button>
+                <button id="close-counting-btn" class="action-btn stand">Zamknij</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
