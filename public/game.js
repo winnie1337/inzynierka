@@ -45,6 +45,7 @@ class BlackjackTrainer {
     document.getElementById('double-btn').addEventListener('click', () => this.playerAction('double'));
     document.getElementById('split-btn').addEventListener('click', () => this.playerAction('split'));
     document.getElementById('surrender-btn').addEventListener('click', () => this.playerAction('surrender'));
+    document.getElementById('reset-game-btn').addEventListener('click', () => this.resetBoard());
 
     document.getElementById('get-tip-btn').addEventListener('click', () => this.getTip());
 
@@ -149,9 +150,46 @@ class BlackjackTrainer {
     this.prevPlayerCounts = [];
   }
 
+  /**
+   * Resetuje planszę do pustego stanu - usuwa wszystkie karty gracza i dealera,
+   * resetuje stan gry, statystyki kart oraz Running Count do 0.
+   * Wywoływane przyciskiem "🔄 NOWA GRA" w trakcie rozgrywki (przerwij grę).
+   */
+  resetBoard() {
+    // Wyczyść karty na stole
+    document.getElementById('dealer-hand').innerHTML = '';
+    document.getElementById('player-hands').innerHTML = '';
+
+    // Wyzeruj wyświetlane wartości
+    const playerValueEl = document.getElementById('player-value');
+    const dealerValueEl = document.getElementById('dealer-value');
+    if (playerValueEl) playerValueEl.textContent = '-';
+    if (dealerValueEl) dealerValueEl.textContent = '?';
+
+    // Reset stanu wewnętrznego
+    this.gameId = null;
+    this.gameState = null;
+    this.currentHandIndex = 0;
+    this.prevDealerCount = 0;
+    this.prevPlayerCounts = [];
+    this.isDealing = false;
+
+    // Reset Running Count do 0
+    this.runningCount = 0;
+    this.renderCounterPanel();
+
+    // Wróć do ekranu zakładów (rozpoczęcia gry)
+    this.showBettingScreen();
+    this.addAIMessage('🔄 Gra przerwana. Plansza i licznik zostały zresetowane.', 'info');
+  }
+
   // Rozpocznij nową grę
   async startNewGame() {
     try {
+      // Reset Running Count do 0 przy każdym rozpoczęciu nowej gry
+      this.runningCount = 0;
+      this.renderCounterPanel();
+
       const numHands = parseInt(document.getElementById('num-hands').value) || 1;
       const numDecks = parseInt(document.getElementById('num-decks').value) || 6;
 
@@ -228,11 +266,17 @@ class BlackjackTrainer {
     // Druga karta dealera (zakryta)
     sequence.push({ target: 'dealer', cardIdx: 1 });
 
+    // Zresetuj lokalny Running Count - będzie aktualizowany po każdej karcie
+    this.runningCount = 0;
+    this.renderCounterPanel();
+
     // Rozdaj kolejno z opóźnieniem
     for (let i = 0; i < sequence.length; i++) {
       const step = sequence[i];
       await this.delay(DEAL_DELAY_MS);
       this.dealOneCard(step);
+      // Po każdej pojedynczej rozdanej karcie zaktualizuj Running Count
+      this.updateRunningCountForDealtCard(step);
     }
 
     // Po zakończeniu animacji odczekaj na ostatnią animację karty
@@ -648,6 +692,37 @@ class BlackjackTrainer {
   }
 
   // === Panel licznika kart (Running Count) ===
+
+  // Wartość karty w systemie Hi-Lo (2-6: +1, 7-9: 0, 10-A: -1)
+  getHiLoValue(card) {
+    if (!card || !card.rank) return 0;
+    const rank = card.rank;
+    if (['2', '3', '4', '5', '6'].includes(rank)) return 1;
+    if (['7', '8', '9'].includes(rank)) return 0;
+    if (['10', 'J', 'Q', 'K', 'A'].includes(rank)) return -1;
+    return 0;
+  }
+
+  /**
+   * Aktualizuje Running Count po pojedynczej rozdanej karcie.
+   * Druga karta dealera podczas rozgrywki jest zakryta - nie wliczamy jej do RC.
+   */
+  updateRunningCountForDealtCard(step) {
+    let card = null;
+    if (step.target === 'dealer') {
+      // Karta zakryta (druga karta dealera w trakcie gry) nie jest widoczna - pomijamy ją
+      const isHidden = (step.cardIdx === 1 && this.gameState.gameState === 'playing');
+      if (isHidden) return;
+      card = this.gameState.dealerHand[step.cardIdx];
+    } else {
+      const hand = this.gameState.playerHands[step.handIdx];
+      card = hand && hand.cards ? hand.cards[step.cardIdx] : null;
+    }
+    if (!card) return;
+
+    this.runningCount += this.getHiLoValue(card);
+    this.renderCounterPanel();
+  }
 
   /**
    * Pobierz aktualny running count z serwera i zapisz w stanie.
