@@ -41,7 +41,7 @@ class CardCountingTrainer {
     return 0;
   }
 
-  // Aktualizacja licznika po rozdaniu kart
+  // Aktualizacja licznika po rozdaniu kart (inkrementacyjnie)
   updateCount(cards) {
     for (let card of cards) {
       const value = this.getHiLoValue(card);
@@ -49,9 +49,65 @@ class CardCountingTrainer {
       this.cardsDealt++;
     }
 
-    // Oblicz True Count
+    // Oblicz True Count (zabezpieczamy się przed dzieleniem przez 0)
     const decksRemaining = (this.totalCards - this.cardsDealt) / 52;
-    this.trueCount = Math.round(this.runningCount / decksRemaining);
+    this.trueCount = decksRemaining > 0
+      ? Math.round(this.runningCount / decksRemaining)
+      : this.runningCount;
+  }
+
+  /**
+   * Przelicz licznik na podstawie bieżącego stanu gry.
+   * Liczy WSZYSTKIE karty widoczne dla gracza:
+   *  - wszystkie karty z każdej ręki gracza (włącznie z dobranymi po hit/double/split),
+   *  - karty dealera: tylko upcard gdy `gameState === 'playing'`, w innym razie cała ręka
+   *    (dealer już odkrył kartę zakrytą i dobrał ewentualne kolejne).
+   *
+   * Dzięki tej metodzie licznik jest zawsze spójny z tym, co widzi gracz na stole,
+   * niezależnie od tego, ile akcji zostało wykonanych.
+   *
+   * @param {Object} gameState - obiekt z BlackjackGame.getGameState()
+   * @param {number} numDecks  - liczba talii w bieżącej grze
+   */
+  recomputeFromGameState(gameState, numDecks) {
+    if (typeof numDecks === 'number' && numDecks > 0) {
+      this.numDecks = numDecks;
+      this.totalCards = 52 * numDecks;
+    }
+
+    let rc = 0;
+    let count = 0;
+
+    // Karty wszystkich rąk gracza
+    if (Array.isArray(gameState?.playerHands)) {
+      for (const hand of gameState.playerHands) {
+        if (!hand || !Array.isArray(hand.cards)) continue;
+        for (const card of hand.cards) {
+          rc += this.getHiLoValue(card);
+          count++;
+        }
+      }
+    }
+
+    // Karty dealera - w trakcie gry tylko upcard, w pozostałych stanach wszystkie
+    if (Array.isArray(gameState?.dealerHand)) {
+      const isPlaying = gameState.gameState === 'playing';
+      const visibleDealerCards = isPlaying
+        ? gameState.dealerHand.slice(0, 1)  // tylko pierwsza karta dealera
+        : gameState.dealerHand;              // wszystkie odkryte
+      for (const card of visibleDealerCards) {
+        rc += this.getHiLoValue(card);
+        count++;
+      }
+    }
+
+    this.runningCount = rc;
+    this.cardsDealt = count;
+
+    const decksRemaining = (this.totalCards - this.cardsDealt) / 52;
+    this.trueCount = decksRemaining > 0
+      ? Math.round(this.runningCount / decksRemaining)
+      : this.runningCount;
   }
 
   // Pobierz aktualny stan licznika

@@ -3,13 +3,28 @@
  * Obsługa interfejsu użytkownika i komunikacji z serwerem
  */
 
+// Stałe konfiguracji wizualnej
+const CARD_OFFSET_PX = 80;       // przesunięcie kolejnej karty w poziomie
+const CARD_WIDTH_PX = 80;        // szerokość karty
+const DEAL_DELAY_MS = 400;       // opóźnienie między kolejnymi kartami przy rozdawaniu
+
 class BlackjackTrainer {
   constructor() {
     this.gameId = null;
     this.currentHandIndex = 0;
     this.gameState = null;
-    this.countingMode = false;
-    
+
+    // Śledzenie liczby kart aby animować tylko nowo dodane karty
+    this.prevDealerCount = 0;
+    this.prevPlayerCounts = [];
+
+    // Flaga blokująca akcje gracza podczas animacji rozdawania
+    this.isDealing = false;
+
+    // Stan panelu licznika kart (Hi-Lo)
+    this.runningCount = 0;          // aktualny RC pobrany z serwera (zawsze świeży)
+    this.countRevealed = false;     // czy panel pokazuje licznik gdy odsłonięty
+
     this.init();
   }
 
@@ -22,63 +37,103 @@ class BlackjackTrainer {
 
   // Konfiguracja event listenerów
   setupEventListeners() {
-    // Przycisk rozpoczęcia gry
     document.getElementById('start-game-btn').addEventListener('click', () => this.startNewGame());
-
-    // Przycisk nowej gry
     document.getElementById('new-game-btn').addEventListener('click', () => this.showBettingScreen());
 
-    // Przyciski akcji
     document.getElementById('hit-btn').addEventListener('click', () => this.playerAction('hit'));
     document.getElementById('stand-btn').addEventListener('click', () => this.playerAction('stand'));
     document.getElementById('double-btn').addEventListener('click', () => this.playerAction('double'));
     document.getElementById('split-btn').addEventListener('click', () => this.playerAction('split'));
     document.getElementById('surrender-btn').addEventListener('click', () => this.playerAction('surrender'));
 
-    // Przyciski AI
     document.getElementById('get-tip-btn').addEventListener('click', () => this.getTip());
-    document.getElementById('counting-mode-btn').addEventListener('click', () => this.toggleCountingMode());
 
-    // Modal liczenia kart
-    document.getElementById('close-counting-btn').addEventListener('click', () => this.closeCountingModal());
-    document.getElementById('submit-count-btn').addEventListener('click', () => this.submitCount());
-
-    // Chat z AI
     document.getElementById('send-chat-btn').addEventListener('click', () => this.sendChatMessage());
     document.getElementById('chat-input').addEventListener('keypress', (e) => {
       if (e.key === 'Enter') this.sendChatMessage();
     });
+
+    // Panel licznika kart (Running Count)
+    document.getElementById('reveal-count-btn').addEventListener('click', () => this.revealCount());
+    document.getElementById('hide-count-btn').addEventListener('click', () => this.hideCount());
+    document.getElementById('guess-count-btn').addEventListener('click', () => this.openGuessForm());
+    document.getElementById('cancel-guess-btn').addEventListener('click', () => this.closeGuessForm());
+    document.getElementById('submit-guess-btn').addEventListener('click', () => this.submitGuess());
+    document.getElementById('guess-count-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.submitGuess();
+    });
   }
 
-  // Wyślij wiadomość do AI
+  // Wyślij wiadomość do AI (Gemini przez /api/chat)
   async sendChatMessage() {
     const input = document.getElementById('chat-input');
-    const question = input.value.trim();
-    
-    if (!question) return;
+    const sendBtn = document.getElementById('send-chat-btn');
+    const message = input.value.trim();
+    if (!message) return;
 
-    // Pokaż pytanie użytkownika
-    this.addAIMessage(`<strong>Ty:</strong> ${question}`, 'info');
+    // Wyświetl wiadomość użytkownika (po prawej, niebieskie tło)
+    this.addAIMessage(`<strong>Ty:</strong> ${this.escapeHtml(message)}`, 'user-message');
     input.value = '';
 
+    // Zablokuj UI i pokaż animację "AI myśli..."
+    input.disabled = true;
+    sendBtn.disabled = true;
+    const thinkingEl = this.showThinkingIndicator();
+
     try {
-      const response = await fetch('/api/game/ask-ai', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({ message })
       });
-
       const data = await response.json();
 
+      // Usuń animację "AI myśli..."
+      if (thinkingEl && thinkingEl.parentNode) {
+        thinkingEl.parentNode.removeChild(thinkingEl);
+      }
+
       if (response.ok) {
-        this.addAIMessage(`<strong>🤖 AI:</strong><br>${data.answer}`, 'info');
+        const safe = this.escapeHtml(data.answer || '');
+        // Odpowiedź bota (po lewej, złociste tło)
+        this.addAIMessage(`<strong>🤖 AI:</strong><br>${safe.replace(/\n/g, '<br>')}`, 'bot-message');
       } else {
-        this.addAIMessage('❌ Nie mogę odpowiedzieć na to pytanie.', 'incorrect');
+        this.addAIMessage(`❌ ${data.error || 'Nie mogę odpowiedzieć na to pytanie.'}`, 'bot-message incorrect');
       }
     } catch (error) {
       console.error('Błąd komunikacji z AI:', error);
-      this.addAIMessage('❌ Błąd połączenia z AI.', 'incorrect');
+      if (thinkingEl && thinkingEl.parentNode) {
+        thinkingEl.parentNode.removeChild(thinkingEl);
+      }
+      this.addAIMessage('❌ Błąd połączenia z AI.', 'bot-message incorrect');
+    } finally {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
     }
+  }
+
+  // Pokaż animowany wskaźnik "AI myśli..."
+  showThinkingIndicator() {
+    const chatMessages = document.getElementById('chat-messages');
+    const el = document.createElement('div');
+    el.className = 'message info thinking-indicator';
+    el.innerHTML = `
+      <strong>🤖 AI myśli</strong>
+      <span class="thinking-dot"></span>
+      <span class="thinking-dot"></span>
+      <span class="thinking-dot"></span>
+    `;
+    chatMessages.appendChild(el);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return el;
+  }
+
+  // Escape HTML aby uniknąć wstrzykiwania znaczników z odpowiedzi AI
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   // Pokaż ekran zakładów
@@ -86,6 +141,12 @@ class BlackjackTrainer {
     document.getElementById('betting-section').style.display = 'block';
     document.querySelector('.game-controls').style.display = 'none';
     document.querySelector('.actions').style.display = 'none';
+
+    // Wyczyść kontenery kart
+    document.getElementById('dealer-hand').innerHTML = '';
+    document.getElementById('player-hands').innerHTML = '';
+    this.prevDealerCount = 0;
+    this.prevPlayerCounts = [];
   }
 
   // Rozpocznij nową grę
@@ -105,16 +166,17 @@ class BlackjackTrainer {
       if (response.ok) {
         this.gameId = data.gameId;
         this.gameState = data.gameState;
-        this.currentHandIndex = 0;
+        this.currentHandIndex = data.gameState.currentHandIndex || 0;
 
         // Ukryj sekcję zakładów, pokaż akcje
         document.getElementById('betting-section').style.display = 'none';
         document.querySelector('.actions').style.display = 'flex';
 
-        this.renderGame();
-        this.addAIMessage('🎮 Nowa gra rozpoczęta! Powodzenia!', 'info');
-        
-        // Pobierz aktualny count
+        this.addAIMessage('🎮 Nowa gra rozpoczęta! Rozdaję karty...', 'info');
+
+        // Animowane rozdawanie początkowych kart
+        await this.dealInitialCardsAnimated();
+
         this.updateCountDisplay();
       } else {
         this.showError(data.error || 'Błąd rozpoczęcia gry');
@@ -125,11 +187,156 @@ class BlackjackTrainer {
     }
   }
 
+  /**
+   * Rozdanie początkowych kart z animacją:
+   * Kolejność (jak w prawdziwym blackjacku):
+   *   1. Każda ręka gracza – pierwsza karta
+   *   2. Dealer – pierwsza karta
+   *   3. Każda ręka gracza – druga karta
+   *   4. Dealer – druga karta (zakryta)
+   * Każda karta pojawia się z opóźnieniem DEAL_DELAY_MS względem poprzedniej.
+   */
+  async dealInitialCardsAnimated() {
+    this.isDealing = true;
+
+    // Wyczyść stare karty
+    document.getElementById('dealer-hand').innerHTML = '';
+    document.getElementById('player-hands').innerHTML = '';
+    this.prevDealerCount = 0;
+    this.prevPlayerCounts = this.gameState.playerHands.map(() => 0);
+
+    // Zbuduj puste szkielety rąk (label + pusty kontener kart)
+    this.buildEmptyHandSkeletons();
+
+    // Wyzeruj wyświetlane wartości
+    document.getElementById('player-value').textContent = '-';
+    document.getElementById('dealer-value').textContent = '?';
+
+    // Zbierz sekwencję rozdań: [{target: 'player', handIdx, cardIdx}, {target: 'dealer', cardIdx}, ...]
+    const sequence = [];
+    const playerHands = this.gameState.playerHands;
+    // Pierwsza karta każdej ręki
+    for (let h = 0; h < playerHands.length; h++) {
+      sequence.push({ target: 'player', handIdx: h, cardIdx: 0 });
+    }
+    // Pierwsza karta dealera
+    sequence.push({ target: 'dealer', cardIdx: 0 });
+    // Druga karta każdej ręki
+    for (let h = 0; h < playerHands.length; h++) {
+      sequence.push({ target: 'player', handIdx: h, cardIdx: 1 });
+    }
+    // Druga karta dealera (zakryta)
+    sequence.push({ target: 'dealer', cardIdx: 1 });
+
+    // Rozdaj kolejno z opóźnieniem
+    for (let i = 0; i < sequence.length; i++) {
+      const step = sequence[i];
+      await this.delay(DEAL_DELAY_MS);
+      this.dealOneCard(step);
+    }
+
+    // Po zakończeniu animacji odczekaj na ostatnią animację karty
+    await this.delay(600);
+
+    this.isDealing = false;
+    // Pełny render aktualizujący wartości, przyciski i ewentualne blackjacki
+    this.renderGame({ animateNew: false });
+  }
+
+  // Buduje puste sekcje rąk (bez kart) dla obecnego gameState
+  buildEmptyHandSkeletons() {
+    // Dealer
+    const dealerHandEl = document.getElementById('dealer-hand');
+    dealerHandEl.innerHTML = '';
+    const dealerLabel = document.createElement('div');
+    dealerLabel.className = 'hand-label';
+    dealerLabel.textContent = 'Dealer:';
+    dealerHandEl.appendChild(dealerLabel);
+    const dealerCards = document.createElement('div');
+    dealerCards.className = 'cards-container';
+    dealerCards.id = 'dealer-cards-container';
+    dealerCards.style.width = `${CARD_WIDTH_PX}px`;
+    dealerHandEl.appendChild(dealerCards);
+
+    // Gracz – każda ręka
+    const playerHandsEl = document.getElementById('player-hands');
+    playerHandsEl.innerHTML = '';
+    this.gameState.playerHands.forEach((hand, index) => {
+      const handEl = document.createElement('div');
+      handEl.className = 'hand';
+      handEl.dataset.handIndex = index;
+      if (index === this.currentHandIndex) handEl.classList.add('active-hand');
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'hand-label';
+      labelEl.textContent = `Ręka ${index + 1}`;
+      handEl.appendChild(labelEl);
+
+      const cardsContainer = document.createElement('div');
+      cardsContainer.className = 'cards-container';
+      cardsContainer.id = `player-cards-container-${index}`;
+      cardsContainer.style.width = `${CARD_WIDTH_PX}px`;
+      handEl.appendChild(cardsContainer);
+
+      const valueEl = document.createElement('div');
+      valueEl.className = 'hand-value';
+      valueEl.id = `player-hand-value-${index}`;
+      valueEl.textContent = '-';
+      valueEl.style.color = '#ffd700';
+      handEl.appendChild(valueEl);
+
+      playerHandsEl.appendChild(handEl);
+    });
+  }
+
+  // Dodaje pojedynczą kartę z animacją lotu z talii do celu
+  dealOneCard(step) {
+    if (step.target === 'dealer') {
+      const card = this.gameState.dealerHand[step.cardIdx];
+      const container = document.getElementById('dealer-cards-container');
+      // Druga karta dealera jest zakryta podczas rozgrywki
+      const hidden = (step.cardIdx === 1 && this.gameState.gameState === 'playing');
+      const cardEl = this.createCardElement(card, hidden, {
+        leftPx: step.cardIdx * CARD_OFFSET_PX,
+        animateClass: 'dealing-dealer'
+      });
+      container.appendChild(cardEl);
+      container.style.width = `${(step.cardIdx + 1) * CARD_OFFSET_PX}px`;
+      this.prevDealerCount = step.cardIdx + 1;
+    } else {
+      const hand = this.gameState.playerHands[step.handIdx];
+      const card = hand.cards[step.cardIdx];
+      const container = document.getElementById(`player-cards-container-${step.handIdx}`);
+      const cardEl = this.createCardElement(card, false, {
+        leftPx: step.cardIdx * CARD_OFFSET_PX,
+        animateClass: 'dealing-player'
+      });
+      container.appendChild(cardEl);
+      container.style.width = `${(step.cardIdx + 1) * CARD_OFFSET_PX}px`;
+      this.prevPlayerCounts[step.handIdx] = step.cardIdx + 1;
+
+      // Zaktualizuj wartość ręki na bieżąco
+      const valueEl = document.getElementById(`player-hand-value-${step.handIdx}`);
+      if (valueEl) {
+        const partialCards = hand.cards.slice(0, step.cardIdx + 1);
+        valueEl.textContent = this.calculateHandValue(partialCards);
+      }
+    }
+  }
+
+  // Pomocnik: opóźnienie (Promise)
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   // Akcja gracza
   async playerAction(action) {
     if (!this.gameId) {
       this.showError('Rozpocznij nową grę!');
       return;
+    }
+    if (this.isDealing) {
+      return; // Ignoruj akcje podczas animacji rozdawania
     }
 
     try {
@@ -145,28 +352,24 @@ class BlackjackTrainer {
         this.gameState = data.gameState;
         this.currentHandIndex = data.gameState.currentHandIndex;
 
-        // Wyrenderuj grę
-        this.renderGame();
+        // Wyrenderuj grę animując tylko nowo dodane karty
+        this.renderGame({ animateNew: true });
 
-        // Pokaż feedback od AI
         if (data.evaluation) {
           const messageClass = data.evaluation.isCorrect ? 'correct' : 'incorrect';
           this.addAIMessage(data.evaluation.feedback, 'feedback ' + messageClass);
         }
 
-        // Zaktualizuj licznik kart
         if (data.counting) {
           this.updateCountDisplay(data.counting);
         }
 
-        // Jeśli gra się skończyła
         if (data.gameState.gameState === 'finished' && data.results) {
           setTimeout(() => {
             this.showResults(data.results);
-            this.loadStats(); // Odśwież statystyki
+            this.loadStats();
           }, 1000);
         }
-
       } else {
         this.showError(data.error || 'Błąd wykonania akcji');
       }
@@ -176,69 +379,83 @@ class BlackjackTrainer {
     }
   }
 
-  // Renderowanie gry
-  renderGame() {
+  // Pełny render aktualnego gameState (po akcji)
+  renderGame(options = { animateNew: true }) {
     if (!this.gameState) return;
+    const animateNew = options.animateNew !== false;
 
-    // Wyrenderuj rękę dealera
-    this.renderDealerHand();
-
-    // Wyrenderuj ręce gracza
-    this.renderPlayerHands();
-
-    // Zaktualizuj przyciski
+    this.renderDealerHand(animateNew);
+    this.renderPlayerHands(animateNew);
     this.updateActionButtons();
-
-    // Zaktualizuj informacje o grze
     this.updateGameInfo();
   }
 
   // Renderuj rękę dealera
-  renderDealerHand() {
+  renderDealerHand(animateNew = true) {
     const dealerHandEl = document.getElementById('dealer-hand');
-    dealerHandEl.innerHTML = '<div class="hand-label">Dealer:</div>';
+    dealerHandEl.innerHTML = '';
 
+    const label = document.createElement('div');
+    label.className = 'hand-label';
+    label.textContent = 'Dealer:';
+    dealerHandEl.appendChild(label);
+
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = 'cards-container';
+    cardsContainer.id = 'dealer-cards-container';
     const cards = this.gameState.dealerHand;
+    cardsContainer.style.width = `${Math.max(cards.length, 1) * CARD_OFFSET_PX}px`;
+
     const isPlaying = this.gameState.gameState === 'playing';
-
     cards.forEach((card, index) => {
-      const cardEl = this.createCardElement(card, isPlaying && index === 1);
-      dealerHandEl.appendChild(cardEl);
+      const hidden = isPlaying && index === 1;
+      const isNew = animateNew && index >= this.prevDealerCount;
+      const cardEl = this.createCardElement(card, hidden, {
+        leftPx: index * CARD_OFFSET_PX,
+        animateClass: isNew ? 'dealing-dealer' : null
+      });
+      cardsContainer.appendChild(cardEl);
     });
+    dealerHandEl.appendChild(cardsContainer);
+    this.prevDealerCount = cards.length;
 
-    // Wyświetl wartość ręki dealera (jeśli gra się skończyła)
     if (this.gameState.gameState === 'finished') {
       const value = this.calculateHandValue(cards);
       const valueEl = document.createElement('div');
       valueEl.className = 'hand-value';
       valueEl.textContent = `(${value})`;
+      valueEl.style.color = '#ffd700';
+      valueEl.style.marginTop = '8px';
       dealerHandEl.appendChild(valueEl);
     }
   }
 
   // Renderuj ręce gracza
-  renderPlayerHands() {
+  renderPlayerHands(animateNew = true) {
     const playerHandsEl = document.getElementById('player-hands');
     playerHandsEl.innerHTML = '';
+
+    // Dopasuj długość prevPlayerCounts do liczby rąk (split może dodać rękę)
+    while (this.prevPlayerCounts.length < this.gameState.playerHands.length) {
+      this.prevPlayerCounts.push(0);
+    }
 
     this.gameState.playerHands.forEach((hand, index) => {
       const handEl = document.createElement('div');
       handEl.className = 'hand';
       handEl.dataset.handIndex = index;
-      
-      // Aktywna ręka
+
       if (index === this.currentHandIndex && this.gameState.gameState === 'playing') {
         handEl.classList.add('active-hand');
       }
 
-      // Możliwość kliknięcia na rękę aby ją wybrać
+      // Możliwość kliknięcia na rękę aby ją wybrać (multi-hand)
       if (this.gameState.gameState === 'playing' && this.gameState.playerHands.length > 1) {
         handEl.style.cursor = 'pointer';
         handEl.addEventListener('click', () => {
           if (!hand.standing && !hand.busted && !hand.surrendered) {
             this.currentHandIndex = index;
-            this.renderGame();
-            this.addAIMessage(`Wybrano rękę ${index + 1}`, 'info');
+            this.renderGame({ animateNew: false });
           }
         });
       }
@@ -248,20 +465,30 @@ class BlackjackTrainer {
       labelEl.textContent = `Ręka ${index + 1}`;
       handEl.appendChild(labelEl);
 
-      // Kontener na karty
+      // Kontener kart (pozycjonowanie absolutne, każda karta o 80px w prawo)
       const cardsContainer = document.createElement('div');
       cardsContainer.className = 'cards-container';
-      hand.cards.forEach(card => {
-        const cardEl = this.createCardElement(card, false);
+      cardsContainer.style.width = `${Math.max(hand.cards.length, 1) * CARD_OFFSET_PX}px`;
+
+      const prevCount = this.prevPlayerCounts[index] || 0;
+      hand.cards.forEach((card, cardIdx) => {
+        const isNew = animateNew && cardIdx >= prevCount;
+        const cardEl = this.createCardElement(card, false, {
+          leftPx: cardIdx * CARD_OFFSET_PX,
+          animateClass: isNew ? 'dealing-player' : null
+        });
         cardsContainer.appendChild(cardEl);
       });
       handEl.appendChild(cardsContainer);
+      this.prevPlayerCounts[index] = hand.cards.length;
 
+      // Wartość ręki
       const value = this.calculateHandValue(hand.cards);
       const valueEl = document.createElement('div');
       valueEl.className = 'hand-value';
       valueEl.textContent = `${value}`;
       valueEl.style.color = hand.busted ? '#dc3545' : '#ffd700';
+      valueEl.style.marginTop = '8px';
       handEl.appendChild(valueEl);
 
       if (hand.busted) {
@@ -286,36 +513,49 @@ class BlackjackTrainer {
     });
   }
 
-  // Utwórz element karty
-  createCardElement(card, hidden = false) {
+  /**
+   * Utwórz element karty
+   * @param {Object} card  - {rank, suit}
+   * @param {boolean} hidden - czy zakryta
+   * @param {Object} opts - { leftPx: number, animateClass: 'dealing-player'|'dealing-dealer'|null }
+   */
+  createCardElement(card, hidden = false, opts = {}) {
     const cardEl = document.createElement('div');
     cardEl.className = 'card';
+
+    if (typeof opts.leftPx === 'number') {
+      cardEl.style.left = `${opts.leftPx}px`;
+    }
+    if (opts.animateClass) {
+      cardEl.classList.add(opts.animateClass);
+    }
 
     if (hidden) {
       cardEl.classList.add('hidden');
       return cardEl;
     }
 
-    // Dodaj klasę koloru
-    if (card.suit === '♥' || card.suit === '♦') {
+    // Kolor wg koloru karty
+    if (card && (card.suit === '♥' || card.suit === '♦')) {
       cardEl.classList.add('suit-hearts');
     } else {
       cardEl.classList.add('suit-spades');
     }
 
-    cardEl.innerHTML = `
-      <div>${card.rank}${card.suit}</div>
-    `;
+    if (card) {
+      cardEl.innerHTML = `<div>${card.rank}${card.suit}</div>`;
+    }
 
     return cardEl;
   }
 
-  // Oblicz wartość ręki - zwraca string z opcjami dla asa
+  // Oblicz wartość ręki – zwraca string z opcjami dla asa lub liczbę
   calculateHandValue(cards) {
     let value = 0;
     let aces = 0;
 
     for (let card of cards) {
+      if (!card) continue;
       if (card.rank === 'A') {
         aces++;
         value += 11;
@@ -326,18 +566,14 @@ class BlackjackTrainer {
       }
     }
 
-    // Jeśli mamy asa i możemy liczyć go jako 11 bez przebicia
     if (aces > 0 && value <= 21) {
       const softValue = value;
       const hardValue = value - 10;
-      
-      // Pokaż obie wartości jeśli są różne i soft nie jest 21
       if (softValue !== hardValue && softValue !== 21) {
         return `${hardValue}/${softValue}`;
       }
     }
 
-    // Dostosowanie asów jeśli wartość > 21
     while (value > 21 && aces > 0) {
       value -= 10;
       aces--;
@@ -346,7 +582,6 @@ class BlackjackTrainer {
     return value;
   }
 
-  // Zaktualizuj przyciski akcji
   updateActionButtons() {
     const isPlaying = this.gameState && this.gameState.gameState === 'playing';
 
@@ -357,15 +592,14 @@ class BlackjackTrainer {
     document.getElementById('surrender-btn').disabled = !isPlaying || !this.gameState.canSurrender;
   }
 
-  // Zaktualizuj informacje o grze
   updateGameInfo() {
     if (!this.gameState) return;
 
-    const playerValue = this.gameState.playerHands[this.currentHandIndex] ?
-      this.calculateHandValue(this.gameState.playerHands[this.currentHandIndex].cards) : 0;
-
-    const dealerValue = this.gameState.gameState === 'finished' ?
-      this.calculateHandValue(this.gameState.dealerHand) : '?';
+    const playerHand = this.gameState.playerHands[this.currentHandIndex];
+    const playerValue = playerHand ? this.calculateHandValue(playerHand.cards) : '-';
+    const dealerValue = this.gameState.gameState === 'finished'
+      ? this.calculateHandValue(this.gameState.dealerHand)
+      : '?';
 
     document.getElementById('player-value').textContent = playerValue;
     document.getElementById('dealer-value').textContent = dealerValue;
@@ -374,162 +608,167 @@ class BlackjackTrainer {
   // Pokaż wyniki
   showResults(results) {
     let message = '🎲 <strong>Wyniki gry:</strong><br><br>';
-
     results.forEach((result, index) => {
       let icon, resultText;
-      
-      switch(result.result) {
-        case 'blackjack':
-          icon = '🎰';
-          resultText = 'BLACKJACK!';
-          break;
-        case 'win':
-          icon = '✅';
-          resultText = 'WYGRANA';
-          break;
-        case 'lose':
-          icon = '❌';
-          resultText = 'PRZEGRANA';
-          break;
-        case 'push':
-          icon = '🤝';
-          resultText = 'REMIS';
-          break;
-        case 'surrender':
-          icon = '🏳️';
-          resultText = 'SURRENDER';
-          break;
-        default:
-          icon = '❓';
-          resultText = result.result.toUpperCase();
+      switch (result.result) {
+        case 'blackjack': icon = '🎰'; resultText = 'BLACKJACK!'; break;
+        case 'win': icon = '✅'; resultText = 'WYGRANA'; break;
+        case 'lose': icon = '❌'; resultText = 'PRZEGRANA'; break;
+        case 'push': icon = '🤝'; resultText = 'REMIS'; break;
+        case 'surrender': icon = '🏳️'; resultText = 'SURRENDER'; break;
+        default: icon = '❓'; resultText = result.result.toUpperCase();
       }
-
       message += `${icon} Ręka ${index + 1}: <strong>${resultText}</strong><br>`;
       message += `Ty: ${result.playerValue}, Dealer: ${result.dealerValue}<br><br>`;
     });
 
     this.addAIMessage(message, 'info');
-    
-    // Pokaż przycisk nowej gry
     document.querySelector('.game-controls').style.display = 'block';
     document.getElementById('new-game-btn').textContent = '🎲 NOWA GRA';
-    
     this.gameId = null;
   }
 
-  // Dodaj wiadomość AI do chatu
   addAIMessage(message, type = 'info') {
     const chatMessages = document.getElementById('chat-messages');
-    
     const messageEl = document.createElement('div');
     messageEl.className = `message ${type}`;
     messageEl.innerHTML = message;
-
     chatMessages.appendChild(messageEl);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
-  // Pobierz poradę od AI
   async getTip() {
     try {
       const response = await fetch('/api/game/strategy-tip');
       const data = await response.json();
-
       this.addAIMessage(`<strong>💡 Porada:</strong><br>${data.strategyTip}`, 'info');
-      
-      if (this.countingMode) {
-        this.addAIMessage(`<strong>🎲 Liczenie kart:</strong><br>${data.countingTip}`, 'info');
-      }
     } catch (error) {
       console.error('Błąd pobierania porady:', error);
     }
   }
 
-  // Przełącz tryb liczenia kart
-  toggleCountingMode() {
-    this.countingMode = !this.countingMode;
-    const btn = document.getElementById('counting-mode-btn');
-    
-    if (this.countingMode) {
-      btn.textContent = '🔢 Wyłącz liczenie kart';
-      btn.style.background = '#28a745';
-      // Ukryj wynik - gracz musi liczyć sam
-      document.getElementById('counter-section').style.display = 'none';
-      this.addAIMessage('🎲 <strong>Tryb liczenia kart włączony!</strong><br><br>Licznik został ukryty - musisz liczyć sam! Po każdej rozdaniu napisz na czacie:<br><br>"RC: [twoja wartość]"<br><br>Przykład: "RC: +5"<br><br>AI sprawdzi czy poprawnie liczysz!', 'info');
-    } else {
-      btn.textContent = '🔢 Włącz liczenie kart';
-      btn.style.background = 'var(--table-green)';
-      document.getElementById('counter-section').style.display = 'none';
-    }
-  }
+  // === Panel licznika kart (Running Count) ===
 
-  // Zaktualizuj wyświetlanie licznika
+  /**
+   * Pobierz aktualny running count z serwera i zapisz w stanie.
+   * Jeśli countData został przekazany (np. z odpowiedzi po akcji), użyj go bezpośrednio.
+   * Następnie odśwież widok panelu zgodnie ze stanem `countRevealed`.
+   */
   async updateCountDisplay(countData = null) {
-    if (!this.countingMode) return;
-
     try {
       if (!countData) {
         const response = await fetch('/api/game/count');
         const data = await response.json();
         countData = data.countInfo;
       }
-
-      document.getElementById('running-count').textContent = countData.runningCount || 0;
-      document.getElementById('true-count').textContent = countData.trueCount || 0;
-      document.getElementById('decks-remaining').textContent = countData.decksRemaining?.toFixed(1) || '6.0';
+      this.runningCount = countData?.runningCount ?? 0;
     } catch (error) {
       console.error('Błąd aktualizacji licznika:', error);
     }
+    this.renderCounterPanel();
   }
 
-  // Otwórz modal testowania liczenia
-  openCountingModal() {
-    document.getElementById('counting-modal').classList.add('active');
-  }
+  // Odświeża wyświetlaną wartość w panelu licznika (??? / liczba) i kolor.
+  renderCounterPanel() {
+    const valueEl = document.getElementById('card-counter-value');
+    const hintEl = document.getElementById('card-counter-hint');
+    if (!valueEl) return;
 
-  // Zamknij modal liczenia
-  closeCountingModal() {
-    document.getElementById('counting-modal').classList.remove('active');
-  }
+    // Reset klas kolorystycznych
+    valueEl.classList.remove('hidden-value', 'positive', 'negative', 'zero');
 
-  // Wyślij odpowiedź count
-  async submitCount() {
-    const runningCount = parseInt(document.getElementById('rc-input').value) || 0;
-    const trueCount = parseInt(document.getElementById('tc-input').value) || 0;
-
-    try {
-      const response = await fetch('/api/game/evaluate-count', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runningCount, trueCount })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        const messageClass = data.evaluation.isCorrect ? 'correct' : 'incorrect';
-        this.addAIMessage(data.evaluation.feedback, 'feedback ' + messageClass);
-        this.closeCountingModal();
-        this.loadStats();
-      }
-    } catch (error) {
-      console.error('Błąd oceny count:', error);
+    if (this.countRevealed) {
+      valueEl.textContent = (this.runningCount > 0 ? '+' : '') + this.runningCount;
+      if (this.runningCount > 0) valueEl.classList.add('positive');
+      else if (this.runningCount < 0) valueEl.classList.add('negative');
+      else valueEl.classList.add('zero');
+      if (hintEl) hintEl.textContent = 'Licznik odkryty — aktualizuje się po każdej rozdanej karcie';
+    } else {
+      valueEl.textContent = '???';
+      valueEl.classList.add('hidden-value');
+      if (hintEl) hintEl.textContent = 'Licznik ukryty — możesz spróbować zgadnąć lub odkryć';
     }
   }
 
-  // Załaduj statystyki użytkownika
+  // Odkrywa licznik (Pokaż licznik)
+  revealCount() {
+    this.countRevealed = true;
+    document.getElementById('reveal-count-btn').style.display = 'none';
+    document.getElementById('hide-count-btn').style.display = '';
+    // Pobierz świeży RC z serwera (na wypadek gdyby coś się zmieniło)
+    this.updateCountDisplay();
+  }
+
+  // Ukrywa licznik (z powrotem ???)
+  hideCount() {
+    this.countRevealed = false;
+    document.getElementById('hide-count-btn').style.display = 'none';
+    document.getElementById('reveal-count-btn').style.display = '';
+    this.renderCounterPanel();
+  }
+
+  // Otwiera formularz "Zgadnij Running Count"
+  openGuessForm() {
+    const form = document.getElementById('guess-count-form');
+    const input = document.getElementById('guess-count-input');
+    const resultEl = document.getElementById('guess-result');
+    form.style.display = 'flex';
+    resultEl.style.display = 'none';
+    input.value = '';
+    input.focus();
+  }
+
+  // Zamyka formularz "Zgadnij Running Count"
+  closeGuessForm() {
+    document.getElementById('guess-count-form').style.display = 'none';
+  }
+
+  // Sprawdza zgadywanie gracza wobec aktualnego runningCount
+  async submitGuess() {
+    const input = document.getElementById('guess-count-input');
+    const resultEl = document.getElementById('guess-result');
+    const raw = input.value.trim();
+    if (raw === '' || isNaN(parseInt(raw, 10))) {
+      resultEl.style.display = 'block';
+      resultEl.className = 'guess-result incorrect';
+      resultEl.textContent = 'Wpisz liczbę całkowitą (np. -2, 0, 3).';
+      return;
+    }
+
+    // Upewnij się że mamy aktualny RC z serwera
+    try {
+      const response = await fetch('/api/game/count');
+      const data = await response.json();
+      this.runningCount = data?.countInfo?.runningCount ?? 0;
+    } catch (e) {
+      console.error('Nie udało się pobrać aktualnego RC:', e);
+    }
+
+    const guess = parseInt(raw, 10);
+    const actual = this.runningCount;
+    const sign = (n) => (n > 0 ? '+' + n : String(n));
+
+    resultEl.style.display = 'block';
+    if (guess === actual) {
+      resultEl.className = 'guess-result correct';
+      resultEl.innerHTML = `✅ <strong>Poprawnie!</strong> Running Count = <strong>${sign(actual)}</strong>`;
+    } else {
+      resultEl.className = 'guess-result incorrect';
+      resultEl.innerHTML = `❌ <strong>Niepoprawnie.</strong> Twoja odpowiedź: <strong>${sign(guess)}</strong>, prawdziwy Running Count: <strong>${sign(actual)}</strong>`;
+    }
+
+    this.closeGuessForm();
+  }
+
   async loadStats() {
     try {
       const response = await fetch('/api/stats/all');
-      
       if (!response.ok) {
         console.error('Błąd pobierania statystyk:', response.status);
         return;
       }
-      
       const data = await response.json();
 
-      // Statystyki gry
       document.getElementById('accuracy-stat').textContent = `${data.gameStats.accuracy || 0}%`;
       document.getElementById('accuracy-stat-big').textContent = `${data.gameStats.accuracy || 0}%`;
       document.getElementById('decisions-stat').textContent = data.gameStats.correct_decisions || 0;
@@ -538,16 +777,11 @@ class BlackjackTrainer {
       document.getElementById('hands-stat').textContent = data.gameStats.hands_played || 0;
       document.getElementById('winrate-stat').textContent = `${data.gameStats.winRate || 0}%`;
 
-      // Statystyki liczenia
       if (document.getElementById('counting-accuracy-stat')) {
         document.getElementById('counting-accuracy-stat').textContent = `${data.countingStats.accuracy || 0}%`;
       }
-      if (document.getElementById('total-counts-stat')) {
-        document.getElementById('total-counts-stat').textContent = data.countingStats.total_counts || 0;
-      }
     } catch (error) {
       console.error('Błąd ładowania statystyk:', error);
-      // Ustaw domyślne wartości przy błędzie
       document.getElementById('accuracy-stat').textContent = '0%';
       document.getElementById('accuracy-stat-big').textContent = '0%';
       document.getElementById('decisions-stat').textContent = '0';
@@ -558,7 +792,6 @@ class BlackjackTrainer {
     }
   }
 
-  // Pokaż błąd
   showError(message) {
     this.addAIMessage(`❌ <strong>Błąd:</strong> ${message}`, 'incorrect');
   }

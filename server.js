@@ -13,6 +13,7 @@ const db = require('./database/db');
 const authRoutes = require('./routes/auth');
 const gameRoutes = require('./routes/game');
 const statsRoutes = require('./routes/stats');
+const chatRoutes = require('./routes/chat');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,7 @@ const ensureSession = (req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/game', ensureSession, gameRoutes);
 app.use('/api/stats', ensureSession, statsRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Strona główna - zawsze game
 app.get('/', (req, res) => {
@@ -67,4 +69,13 @@ db.initialize();
 app.listen(PORT, () => {
   console.log(`🎰 Blackjack Trainer uruchomiony na http://localhost:${PORT}`);
   console.log('📚 Gotowy do nauki gry w blackjacka!');
+
+  // Diagnostyka klucza Groq - sprawdzamy czy jest dostępny w env
+  if (process.env.GROQ_API_KEY) {
+    const k = process.env.GROQ_API_KEY;
+    const masked = k.length > 10 ? `${k.slice(0, 6)}...${k.slice(-4)}` : '***';
+    console.log(`🤖 GROQ_API_KEY wczytany z .env (${masked}) - czat AI (llama-3.3-70b-versatile) gotowy`);
+  } else {
+    console.warn('⚠️  Brak GROQ_API_KEY w .env - endpoint /api/chat zwróci błąd 500');
+  }
 });

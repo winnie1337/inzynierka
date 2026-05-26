@@ -8,14 +8,11 @@ const BlackjackGame = require('../game/blackjack');
 const BasicStrategyAI = require('../game/basicStrategy');
 const CardCountingTrainer = require('../game/cardCounting');
 const db = require('../database/db');
-const OpenAI = require('openai');
 
 const router = express.Router();
 
-// Inicjalizacja OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Uwaga: czat AI obsługiwany jest przez routes/chat.js (Groq, model llama-3.3-70b-versatile).
+// Dawny endpoint /api/game/ask-ai (OpenAI) został usunięty.
 
 // Przykład aktywnej gry - w produkcji użyj w pamięci lub redis
 let activeGames = {};
@@ -36,6 +33,8 @@ router.post('/new-game', (req, res) => {
 
     const gameId = `game_${userId}_${Date.now()}`;
     const game = new BlackjackGame(numDecks);
+    // Reset licznika na początku gry - ustawi też prawidłową liczbę talii
+    countingTrainer.reset();
 
     game.startNewGame(numHands);
     
@@ -58,19 +57,22 @@ router.post('/new-game', (req, res) => {
     
     const gameState = game.getGameState();
 
-    // Zachowaj grę w pamięci
+    // Zachowaj grę w pamięci (zapisujemy też numDecks aby licznik znał liczbę talii)
     activeGames[gameId] = {
       game,
       userId,
+      numDecks,
       createdAt: Date.now()
     };
 
-    // Reset licznika dla nowej gry
-    countingTrainer.reset();
+    // Przelicz licznik na podstawie widocznych kart początkowego rozdania.
+    // Liczy karty wszystkich rąk gracza + tylko upcard dealera (druga karta jest zakryta).
+    countingTrainer.recomputeFromGameState(gameState, numDecks);
 
     res.json({
       gameId,
       gameState,
+      counting: countingTrainer.getCount(),
       message: 'Nowa gra została rozpoczęta!'
     });
 
@@ -93,9 +95,9 @@ router.post('/action/:gameId', (req, res) => {
     }
 
     const game = gameData.game;
+    const numDecks = gameData.numDecks || 6;
     let result;
     let evaluation;
-    let newCards = [];
 
     // OCENA PRZED AKCJĄ - zapisz stan przed wykonaniem
     const hand = game.playerHands[handIndex];
@@ -122,18 +124,15 @@ router.post('/action/:gameId', (req, res) => {
     switch (action.toLowerCase()) {
       case 'hit':
         result = game.hit(handIndex);
-        newCards = result.hand.cards.slice(-1);
         break;
       case 'stand':
         result = game.stand(handIndex);
         break;
       case 'double':
         result = game.double(handIndex);
-        newCards = result.hand.cards.slice(-1);
         break;
       case 'split':
         result = game.split(handIndex);
-        newCards = result.newHand.cards.slice(1);
         break;
       case 'surrender':
         result = game.surrender(handIndex);
@@ -142,15 +141,13 @@ router.post('/action/:gameId', (req, res) => {
         return res.status(400).json({ error: 'Nieprawidłowa akcja' });
     }
 
-    // Zaktualizuj licznik jeśli dodano nowe karty
-    if (newCards.length > 0) {
-      countingTrainer.updateCount(newCards);
-    }
-
     // Pobierz aktualny stan gry
     const currentState = game.getGameState();
 
-    // Dodaj informacje o liczeniu kart
+    // Przelicz licznik na podstawie wszystkich widocznych kart w obecnym stanie gry.
+    // To gwarantuje, że żadna karta nie zostanie pominięta - również karty dealera odsłonięte
+    // po zakończeniu rundy (gdy dealer dobiera) są uwzględnione w running countcie.
+    countingTrainer.recomputeFromGameState(currentState, numDecks);
     const countInfo = countingTrainer.getCount();
 
     // Jeśli gra się zakończyła, zapisz wyniki
@@ -287,45 +284,6 @@ router.get('/strategy-tip', (req, res) => {
     strategyTip: tip,
     countingTip: countingTip
   });
-});
-
-// Chat z prawdziwym AI (OpenAI)
-router.post('/ask-ai', async (req, res) => {
-  try {
-    const { question } = req.body;
-    
-    if (!question || typeof question !== 'string') {
-      return res.status(400).json({ error: 'Brak pytania' });
-    }
-
-    // Wywołanie OpenAI API
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "Jesteś ekspertem od blackjacka i ekspertem od nauki gry w blackjacka. Specjalizujesz się w Basic Strategy i liczeniu kart (Hi-Lo). Odpowiadaj konkretnie, jasno i zwięźle po polsku. Pomagasz graczom poprawiać ich umiejętności w blackjacku."
-        },
-        {
-          role: "user",
-          content: question
-        }
-      ],
-      max_tokens: 300,
-      temperature: 0.7
-    });
-
-    const answer = completion.choices[0].message.content;
-
-    res.json({ answer });
-
-  } catch (error) {
-    console.error('Błąd OpenAI:', error);
-    res.status(500).json({ 
-      error: 'Błąd podczas generowania odpowiedzi',
-      answer: 'Przepraszam, wystąpił błąd. Spróbuj ponownie lub zadaj inne pytanie.'
-    });
-  }
 });
 
 module.exports = router;

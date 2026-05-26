@@ -103,7 +103,8 @@ body::before {
 /* Główna gra */
 .game-container {
   display: grid;
-  grid-template-columns: 3fr 1fr;
+  /* Lewa kolumna elastyczna, prawa (czat) - min 380px aby mieścić komfortowo wiadomości */
+  grid-template-columns: minmax(0, 1fr) 380px;
   gap: 30px;
   align-items: start;
   margin-bottom: 30px;
@@ -118,22 +119,24 @@ body::before {
   box-shadow: 0 15px 35px var(--shadow);
 }
 
-/* Obszar kart */
+/* Obszar kart - wertykalny układ: dealer (góra) | talia (środek) | gracz (dół) */
 .cards-area {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 30px;
+  justify-content: center;
+  gap: 25px;
   margin-bottom: 30px;
-  min-height: 400px;
+  min-height: 500px;
   position: relative;
 }
 
-/* Talia kart na stole */
+/* Talia kart - wyśrodkowana, centralny punkt stołu */
 .deck-stack {
-  position: absolute;
-  top: 10px;
-  right: 30px;
+  position: relative;
+  width: 90px;
+  height: 120px;
+  margin: 10px auto;
   z-index: 5;
 }
 
@@ -144,19 +147,17 @@ body::before {
   border: 2px solid var(--gold);
   border-radius: 8px;
   position: absolute;
+  top: 0;
+  left: 5px;
   box-shadow: 0 4px 12px var(--card-shadow);
 }
 
 .deck-card:nth-child(1) {
-  transform: rotate(-2deg);
-  top: 2px;
-  left: 2px;
+  transform: rotate(-3deg) translate(-2px, -2px);
 }
 
 .deck-card:nth-child(2) {
-  transform: rotate(1deg);
-  top: 1px;
-  left: 1px;
+  transform: rotate(2deg) translate(2px, -1px);
 }
 
 .deck-card:nth-child(3) {
@@ -173,15 +174,16 @@ body::before {
   color: var(--gold);
 }
 
+/* Strefa dealera (na górze) */
 .dealer-section {
   width: 100%;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 20px;
+  gap: 10px;
 }
 
+/* Strefa gracza (na dole) */
 .player-section {
   width: 100%;
   display: flex;
@@ -190,12 +192,12 @@ body::before {
 }
 
 .hands-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
   width: 100%;
-  max-width: 900px;
-  justify-items: center;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .hand {
@@ -206,66 +208,58 @@ body::before {
   background: rgba(0,0,0,0.3);
   border-radius: 15px;
   border: 3px solid rgba(255, 215, 0, 0.3);
-  min-width: 150px;
-  transition: all 0.3s ease;
+  min-width: 180px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .hand.active-hand {
   border-color: #ffd700;
   box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-  transform: scale(1.05);
 }
 
-.hand:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-
+/* Kontener kart - karty układane absolutnie obok siebie z przesunięciem 80px */
 .cards-container {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  justify-content: center;
+  position: relative;
+  height: 112px;
+  width: 80px; /* powiększane dynamicznie w JS na podstawie liczby kart */
   margin: 10px 0;
 }
 
 .hand-label {
   color: var(--gold);
   font-weight: 500;
-  margin-right: 10px;
-  min-width: 80px;
+  margin-bottom: 5px;
+  text-align: center;
 }
 
 .card {
   width: 80px;
   height: 112px;
   border-radius: 8px;
-  background: var(--card-back);
+  background: #ffffff;
   border: 2px solid var(--gold);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24px;
   font-weight: bold;
-  color: var(--gold);
+  color: var(--text-dark);
   box-shadow: 0 4px 12px var(--card-shadow);
-  position: relative;
-  transition: transform 0.2s ease;
-  animation: cardDeal 0.8s ease-out;
+  position: absolute;
+  top: 0;
+  /* left jest ustawiany inline w JS (index * 80px) - nie nakładają się */
+  transition: box-shadow 0.2s ease;
 }
 
-@keyframes cardDeal {
+/* Animacja rozdania karty do gracza - leci ze środka stołu w dół */
+@keyframes dealToPlayer {
   0% {
     opacity: 0;
-    transform: translate(-300px, -200px) scale(0.8) rotate(15deg);
+    transform: translate(0, -260px) scale(0.6) rotate(-15deg);
   }
-  50% {
+  60% {
     opacity: 1;
-    transform: translate(-150px, -100px) scale(0.9) rotate(8deg);
-  }
-  80% {
-    opacity: 1;
-    transform: translate(10px, 10px) scale(1.05) rotate(-3deg);
+    transform: translate(0, 10px) scale(1.05) rotate(2deg);
   }
   100% {
     opacity: 1;
@@ -273,8 +267,32 @@ body::before {
   }
 }
 
+/* Animacja rozdania karty do dealera - leci ze środka stołu w górę */
+@keyframes dealToDealer {
+  0% {
+    opacity: 0;
+    transform: translate(0, 260px) scale(0.6) rotate(15deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(0, -10px) scale(1.05) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+}
+
+.card.dealing-player {
+  animation: dealToPlayer 0.6s ease-out;
+}
+
+.card.dealing-dealer {
+  animation: dealToDealer 0.6s ease-out;
+}
+
 .card:hover {
-  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);
 }
 
 .card.suit-hearts,
@@ -438,15 +456,18 @@ body::before {
   line-height: 1.4;
 }
 
-/* Panel chatu AI (prawa strona) */
+/* Panel chatu AI (prawa strona) - powiększony, bardziej czytelny */
 .ai-chat {
-  background: linear-gradient(145deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6));
+  background: linear-gradient(145deg, rgba(0,0,0,0.85), rgba(0,0,0,0.65));
   border-radius: 20px;
   padding: 25px;
   border: 2px solid var(--gold);
   box-shadow: 0 15px 35px var(--shadow);
-  max-height: 600px;
+  min-width: 350px;
+  max-height: 800px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-header {
@@ -461,19 +482,46 @@ body::before {
 }
 
 .chat-messages {
-  min-height: 350px;
-  max-height: 400px;
+  min-height: 500px;
+  max-height: 600px;
   margin-bottom: 15px;
   overflow-y: auto;
+  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
+/* Domyślny styl wiadomości (bot / info) */
 .message {
-  background: rgba(255,215,0,0.1);
-  border-radius: 10px;
-  padding: 15px;
-  margin-bottom: 12px;
-  border-left: 3px solid var(--gold);
+  background: rgba(255,215,0,0.10);
+  border-radius: 12px;
+  padding: 14px 18px;
+  border-left: 4px solid var(--gold);
   animation: messageAppear 0.3s ease-out;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-light);
+  word-wrap: break-word;
+  align-self: stretch;
+}
+
+/* Wiadomość użytkownika - inny kolor, wyrównana do prawej */
+.message.user-message {
+  background: linear-gradient(145deg, rgba(0, 123, 255, 0.30), rgba(0, 86, 179, 0.25));
+  border-left: none;
+  border-right: 4px solid #66b3ff;
+  align-self: flex-end;
+  max-width: 90%;
+  text-align: left;
+}
+
+/* Wiadomość bota - bardziej kontrastowa, wyrównana do lewej */
+.message.bot-message {
+  background: linear-gradient(145deg, rgba(255, 215, 0, 0.18), rgba(184, 134, 11, 0.10));
+  border-left: 4px solid var(--gold);
+  align-self: flex-start;
+  max-width: 95%;
 }
 
 @keyframes messageAppear {
@@ -1006,6 +1054,206 @@ body::before {
 @keyframes spotPulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.1); }
+}
+
+/* === Panel licznika kart (Hi-Lo) - nad przyciskami akcji === */
+.card-counter-panel {
+  background: linear-gradient(145deg, rgba(13, 74, 39, 0.85), rgba(0, 0, 0, 0.55));
+  border: 2px solid var(--gold);
+  border-radius: 16px;
+  padding: 20px 25px;
+  margin: 0 auto 25px;
+  max-width: 720px;
+  box-shadow: 0 10px 25px var(--shadow), inset 0 0 30px rgba(255, 215, 0, 0.05);
+}
+
+.card-counter-title {
+  text-align: center;
+  color: var(--gold);
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem;
+  letter-spacing: 1px;
+  margin-bottom: 18px;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+}
+
+.card-counter-display {
+  text-align: center;
+  padding: 16px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  margin-bottom: 18px;
+}
+
+.card-counter-label {
+  font-size: 12px;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+
+/* Wartość licznika - duża i czytelna gdy odkryta */
+.card-counter-value {
+  font-family: 'Playfair Display', serif;
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 0 18px rgba(255, 215, 0, 0.55);
+  letter-spacing: 2px;
+  transition: color 0.3s ease, transform 0.3s ease;
+}
+
+/* Stan: licznik ukryty (???) */
+.card-counter-value.hidden-value {
+  color: rgba(255, 215, 0, 0.55);
+  font-size: 3rem;
+  letter-spacing: 6px;
+}
+
+/* Stan: licznik odkryty - lekkie podświetlenie wartości dodatniej/ujemnej */
+.card-counter-value.positive { color: #6ee7b7; text-shadow: 0 0 18px rgba(110, 231, 183, 0.55); }
+.card-counter-value.negative { color: #fca5a5; text-shadow: 0 0 18px rgba(252, 165, 165, 0.55); }
+.card-counter-value.zero     { color: var(--gold); }
+
+.card-counter-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.card-counter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.counter-btn {
+  padding: 10px 18px;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--gold);
+  border: 1.5px solid var(--gold);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.counter-btn:hover {
+  background: var(--gold);
+  color: var(--text-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+}
+
+.counter-btn.primary {
+  background: linear-gradient(145deg, var(--gold), var(--gold-dark));
+  color: var(--text-dark);
+}
+
+.counter-btn.primary:hover {
+  background: linear-gradient(145deg, #ffed4e, var(--gold));
+}
+
+/* Formularz zgadywania licznika */
+.guess-count-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 215, 0, 0.35);
+}
+
+.guess-count-label {
+  color: var(--gold);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.guess-count-input {
+  width: 90px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  color: var(--text-light);
+  font-size: 16px;
+  text-align: center;
+}
+
+.guess-count-input:focus {
+  outline: none;
+  border-color: #ffb347;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2);
+}
+
+/* Komunikat o wyniku zgadywania */
+.guess-result {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: messageAppear 0.3s ease-out;
+}
+
+.guess-result.correct {
+  background: rgba(40, 167, 69, 0.18);
+  border-left: 4px solid var(--green);
+  color: #d4edda;
+}
+
+.guess-result.incorrect {
+  background: rgba(220, 53, 69, 0.18);
+  border-left: 4px solid var(--red);
+  color: #f8d7da;
+}
+
+/* Animacja "AI myśli..." */
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-style: italic;
+  color: var(--gold);
+}
+
+.thinking-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: thinkingBounce 1.4s infinite ease-in-out both;
+}
+
+.thinking-dot:nth-child(2) { animation-delay: -0.32s; }
+.thinking-dot:nth-child(3) { animation-delay: -0.16s; }
+.thinking-dot:nth-child(4) { animation-delay: 0s; }
+
+@keyframes thinkingBounce {
+  0%, 80%, 100% {
+    transform: scale(0.4);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* Responsywność */
